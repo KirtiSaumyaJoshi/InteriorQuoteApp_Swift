@@ -7,10 +7,18 @@ class PropertyListViewController: UIViewController {
 
     private let db = Firestore.firestore()
     private var properties: [Property] = []
+    private var filteredProperties: [Property] = []
+
+    private let searchController = UISearchController(searchResultsController: nil)
+
+    private var isSearching: Bool {
+        let text = searchController.searchBar.text ?? ""
+        return searchController.isActive && !text.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        navigationItem.hidesSearchBarWhenScrolling = false
         title = "Properties"
         view.backgroundColor = .systemBackground
 
@@ -26,12 +34,24 @@ class PropertyListViewController: UIViewController {
             action: #selector(addPropertyTapped)
         )
 
+        setupSearchBar()
         fetchProperties()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         fetchProperties()
+    }
+
+    private func setupSearchBar() {
+        searchController.searchResultsUpdater = self
+        searchController.obscuresBackgroundDuringPresentation = false
+        searchController.searchBar.placeholder = "Search properties, owners, or location"
+        searchController.searchBar.sizeToFit()
+
+        tableView.tableHeaderView = searchController.searchBar
+
+        definesPresentationContext = true
     }
 
     private func fetchProperties() {
@@ -74,6 +94,7 @@ class PropertyListViewController: UIViewController {
                     )
                 } ?? []
 
+                self.filteredProperties = self.properties
                 self.tableView.reloadData()
             }
     }
@@ -104,7 +125,7 @@ class PropertyListViewController: UIViewController {
 
         present(alert, animated: true)
     }
-    
+
     private func deleteSubcollection(_ collection: CollectionReference,
                                      completion: @escaping () -> Void) {
         collection.getDocuments { snapshot, error in
@@ -167,6 +188,7 @@ class PropertyListViewController: UIViewController {
                     }
 
                     self.properties.removeAll { $0.id == property.id }
+                    self.filteredProperties.removeAll { $0.id == property.id }
                     self.tableView.reloadData()
                 }
             }
@@ -189,7 +211,7 @@ extension PropertyListViewController: UITableViewDataSource, UITableViewDelegate
 
     func tableView(_ tableView: UITableView,
                    numberOfRowsInSection section: Int) -> Int {
-        return properties.count
+        return isSearching ? filteredProperties.count : properties.count
     }
 
     func tableView(_ tableView: UITableView,
@@ -202,7 +224,8 @@ extension PropertyListViewController: UITableViewDataSource, UITableViewDelegate
             return UITableViewCell()
         }
 
-        let property = properties[indexPath.row]
+        let property = isSearching ? filteredProperties[indexPath.row] : properties[indexPath.row]
+
         cell.configure(with: property)
         cell.delegate = self
         cell.selectionStyle = .none
@@ -214,11 +237,38 @@ extension PropertyListViewController: UITableViewDataSource, UITableViewDelegate
                    didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        let selectedProperty = properties[indexPath.row]
+        let selectedProperty = isSearching ? filteredProperties[indexPath.row] : properties[indexPath.row]
+
         let roomListVC = RoomListViewController()
         roomListVC.property = selectedProperty
 
         navigationController?.pushViewController(roomListVC, animated: true)
+    }
+}
+
+extension PropertyListViewController: UISearchResultsUpdating {
+
+    func updateSearchResults(for searchController: UISearchController) {
+        guard let searchText = searchController.searchBar.text?
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces),
+              !searchText.isEmpty else {
+            filteredProperties = properties
+            tableView.reloadData()
+            return
+        }
+
+        filteredProperties = properties.filter { property in
+            property.propertyName.lowercased().contains(searchText) ||
+            property.ownerFirstName.lowercased().contains(searchText) ||
+            property.ownerLastName.lowercased().contains(searchText) ||
+            property.city.lowercased().contains(searchText) ||
+            property.state.lowercased().contains(searchText) ||
+            property.country.lowercased().contains(searchText) ||
+            property.zipCode.lowercased().contains(searchText)
+        }
+
+        tableView.reloadData()
     }
 }
 
