@@ -104,16 +104,72 @@ class PropertyListViewController: UIViewController {
 
         present(alert, animated: true)
     }
+    
+    private func deleteSubcollection(_ collection: CollectionReference,
+                                     completion: @escaping () -> Void) {
+        collection.getDocuments { snapshot, error in
+            guard error == nil else {
+                completion()
+                return
+            }
+
+            let group = DispatchGroup()
+
+            snapshot?.documents.forEach { document in
+                group.enter()
+                document.reference.delete { _ in
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                completion()
+            }
+        }
+    }
 
     private func deleteProperty(_ property: Property) {
-        db.collection("properties").document(property.id).delete { error in
+        let propertyRef = db.collection("properties").document(property.id)
+        let roomsRef = propertyRef.collection("rooms")
+
+        roomsRef.getDocuments { roomSnapshot, error in
             if let error = error {
                 self.showAlert(title: "Delete Failed", message: error.localizedDescription)
                 return
             }
 
-            self.properties.removeAll { $0.id == property.id }
-            self.tableView.reloadData()
+            let group = DispatchGroup()
+
+            roomSnapshot?.documents.forEach { roomDocument in
+                let roomRef = roomsRef.document(roomDocument.documentID)
+
+                group.enter()
+                self.deleteSubcollection(roomRef.collection("windows")) {
+                    group.leave()
+                }
+
+                group.enter()
+                self.deleteSubcollection(roomRef.collection("floors")) {
+                    group.leave()
+                }
+
+                group.enter()
+                roomRef.delete { _ in
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                propertyRef.delete { error in
+                    if let error = error {
+                        self.showAlert(title: "Delete Failed", message: error.localizedDescription)
+                        return
+                    }
+
+                    self.properties.removeAll { $0.id == property.id }
+                    self.tableView.reloadData()
+                }
+            }
         }
     }
 
@@ -158,8 +214,11 @@ extension PropertyListViewController: UITableViewDataSource, UITableViewDelegate
                    didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        // Next stage: open rooms for selected property
-        print("Open rooms for: \(properties[indexPath.row].propertyName)")
+        let selectedProperty = properties[indexPath.row]
+        let roomListVC = RoomListViewController()
+        roomListVC.property = selectedProperty
+
+        navigationController?.pushViewController(roomListVC, animated: true)
     }
 }
 
