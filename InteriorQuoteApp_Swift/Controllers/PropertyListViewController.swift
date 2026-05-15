@@ -1,3 +1,10 @@
+//
+//  PropertyListViewController.swift
+//  InteriorQuoteApp_Swift
+//
+//  Created by Kirti Saumya Joshi on 4/5/2026.
+//
+
 import UIKit
 import FirebaseFirestore
 
@@ -26,7 +33,7 @@ class PropertyListViewController: UIViewController {
         tableView.delegate = self
         tableView.register(PropertyCell.self, forCellReuseIdentifier: "PropertyCell")
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 80
+        tableView.estimatedRowHeight = 120
 
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .add,
@@ -64,7 +71,14 @@ class PropertyListViewController: UIViewController {
                     return
                 }
 
-                self.properties = snapshot?.documents.compactMap { document in
+                let documents = snapshot?.documents ?? []
+
+                var loadedProperties: [Property] = []
+
+                let group = DispatchGroup()
+
+                for document in documents {
+
                     let data = document.data()
 
                     guard let propertyName = data["propertyName"] as? String,
@@ -76,26 +90,44 @@ class PropertyListViewController: UIViewController {
                           let state = data["state"] as? String,
                           let country = data["country"] as? String,
                           let zipCode = data["zipCode"] as? String else {
-                        return nil
+                        continue
                     }
 
-                    return Property(
-                        id: document.documentID,
-                        propertyName: propertyName,
-                        ownerFirstName: ownerFirstName,
-                        ownerMiddleName: data["ownerMiddleName"] as? String,
-                        ownerLastName: ownerLastName,
-                        ownerGender: ownerGender,
-                        addressLine: addressLine,
-                        city: city,
-                        state: state,
-                        country: country,
-                        zipCode: zipCode
-                    )
-                } ?? []
+                    group.enter()
 
-                self.filteredProperties = self.properties
-                self.tableView.reloadData()
+                    self.db.collection("properties")
+                        .document(document.documentID)
+                        .collection("rooms")
+                        .getDocuments { roomSnapshot, _ in
+
+                            let roomCount = roomSnapshot?.documents.count ?? 0
+
+                            let property = Property(
+                                id: document.documentID,
+                                propertyName: propertyName,
+                                ownerFirstName: ownerFirstName,
+                                ownerMiddleName: data["ownerMiddleName"] as? String,
+                                ownerLastName: ownerLastName,
+                                ownerGender: ownerGender,
+                                addressLine: addressLine,
+                                city: city,
+                                state: state,
+                                country: country,
+                                roomCount: roomCount,
+                                zipCode: zipCode
+                            )
+
+                            loadedProperties.append(property)
+
+                            group.leave()
+                        }
+                }
+
+                group.notify(queue: .main) {
+                    self.properties = loadedProperties
+                    self.filteredProperties = loadedProperties
+                    self.tableView.reloadData()
+                }
             }
     }
 

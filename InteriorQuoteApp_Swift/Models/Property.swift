@@ -10,7 +10,7 @@ import Foundation
 class Property {
     var id: String
     var propertyName: String
-
+    var roomCount: Int
     var ownerFirstName: String
     var ownerMiddleName: String?
     var ownerLastName: String
@@ -32,6 +32,7 @@ class Property {
          city: String,
          state: String,
          country: String,
+         roomCount: Int = 0,
          zipCode: String) {
 
         self.id = id
@@ -45,6 +46,7 @@ class Property {
         self.state = state
         self.country = country
         self.zipCode = zipCode
+        self.roomCount = roomCount
     }
 
     var ownerFullName: String {

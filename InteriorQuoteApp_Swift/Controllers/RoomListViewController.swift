@@ -1,3 +1,10 @@
+//
+//  RoomListViewController.swift
+//  InteriorQuoteApp_Swift
+//
+//  Created by Kirti Saumya Joshi on 4/5/2026.
+//
+
 import UIKit
 import FirebaseFirestore
 
@@ -7,9 +14,17 @@ class RoomListViewController: UIViewController {
 
     private let db = Firestore.firestore()
     private var rooms: [Room] = []
+    private var filteredRooms: [Room] = []
 
     private let tableView = UITableView()
     private let emptyLabel = UILabel()
+
+    private let searchController = UISearchController(searchResultsController: nil)
+
+    private var isSearching: Bool {
+        let text = searchController.searchBar.text ?? ""
+        return searchController.isActive && !text.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -18,12 +33,86 @@ class RoomListViewController: UIViewController {
         view.backgroundColor = .systemGroupedBackground
 
         setupUI()
+        setupSearchBar()
         fetchRooms()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         fetchRooms()
+    }
+    
+    private func confirmDeleteRoom(_ room: Room) {
+        let alert = UIAlertController(
+            title: "Delete Room?",
+            message: "This will delete \(room.name), including its windows and floor details. This action cannot be undone.",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+            self.deleteRoom(room)
+        })
+
+        present(alert, animated: true)
+    }
+
+    private func deleteRoom(_ room: Room) {
+        let roomRef = db.collection("properties")
+            .document(property.id)
+            .collection("rooms")
+            .document(room.id)
+
+        let group = DispatchGroup()
+
+        group.enter()
+        deleteSubcollection(roomRef.collection("windows")) {
+            group.leave()
+        }
+
+        group.enter()
+        deleteSubcollection(roomRef.collection("floors")) {
+            group.leave()
+        }
+
+        group.notify(queue: .main) {
+            roomRef.delete { error in
+                if let error = error {
+                    self.showAlert(title: "Delete Failed", message: error.localizedDescription)
+                    return
+                }
+
+                self.rooms.removeAll { $0.id == room.id }
+                self.filteredRooms.removeAll { $0.id == room.id }
+
+                self.updateEmptyState()
+                self.tableView.reloadData()
+            }
+        }
+    }
+
+    private func deleteSubcollection(_ collection: CollectionReference,
+                                     completion: @escaping () -> Void) {
+        collection.getDocuments { snapshot, error in
+            guard error == nil else {
+                completion()
+                return
+            }
+
+            let group = DispatchGroup()
+
+            snapshot?.documents.forEach { document in
+                group.enter()
+                document.reference.delete { _ in
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                completion()
+            }
+        }
     }
 
     private func setupUI() {
@@ -41,7 +130,7 @@ class RoomListViewController: UIViewController {
 
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "RoomCell")
+        tableView.register(RoomCell.self, forCellReuseIdentifier: "RoomCell")
         tableView.backgroundColor = .clear
 
         emptyLabel.text = "No rooms added yet.\nTap + to add the first room."
@@ -61,6 +150,17 @@ class RoomListViewController: UIViewController {
             emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
             emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32)
         ])
+    }
+
+    private func setupSearchBar() {
+        searchController.searchResultsUpdater = self
+        searchController.obscuresBackgroundDuringPresentation = false
+        searchController.searchBar.placeholder = "Search rooms"
+        searchController.searchBar.sizeToFit()
+
+        tableView.tableHeaderView = searchController.searchBar
+
+        definesPresentationContext = true
     }
 
     private func fetchRooms() {
@@ -89,9 +189,24 @@ class RoomListViewController: UIViewController {
                     )
                 } ?? []
 
-                self.emptyLabel.isHidden = !self.rooms.isEmpty
+                self.filteredRooms = self.rooms
+                self.updateEmptyState()
                 self.tableView.reloadData()
             }
+    }
+
+    private func updateEmptyState() {
+        let visibleRooms = isSearching ? filteredRooms : rooms
+
+        if rooms.isEmpty {
+            emptyLabel.text = "No rooms added yet.\nTap + to add the first room."
+            emptyLabel.isHidden = false
+        } else if visibleRooms.isEmpty {
+            emptyLabel.text = "No matching rooms found."
+            emptyLabel.isHidden = false
+        } else {
+            emptyLabel.isHidden = true
+        }
     }
 
     @objc private func addRoomTapped() {
@@ -111,20 +226,24 @@ extension RoomListViewController: UITableViewDataSource, UITableViewDelegate {
 
     func tableView(_ tableView: UITableView,
                    numberOfRowsInSection section: Int) -> Int {
-        return rooms.count
+        return isSearching ? filteredRooms.count : rooms.count
     }
 
     func tableView(_ tableView: UITableView,
                    cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "RoomCell")
-        let room = rooms[indexPath.row]
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: "RoomCell",
+            for: indexPath
+        ) as? RoomCell else {
+            return UITableViewCell()
+        }
 
-        cell.textLabel?.text = room.name
-        cell.textLabel?.font = .boldSystemFont(ofSize: 17)
-        cell.detailTextLabel?.text = "Tap to manage windows, floors, photo and quote"
-        cell.detailTextLabel?.textColor = .secondaryLabel
-        cell.accessoryType = .disclosureIndicator
+        let room = isSearching ? filteredRooms[indexPath.row] : rooms[indexPath.row]
+
+        cell.configure(with: room)
+        cell.delegate = self
+        cell.selectionStyle = .none
 
         return cell
     }
@@ -133,7 +252,42 @@ extension RoomListViewController: UITableViewDataSource, UITableViewDelegate {
                    didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        // Next stage: open room details page
-        print("Selected room: \(rooms[indexPath.row].name)")
+        let selectedRoom = isSearching
+            ? filteredRooms[indexPath.row]
+            : rooms[indexPath.row]
+
+        let addRoomVC = AddRoomViewController()
+        addRoomVC.property = property
+        addRoomVC.roomToEdit = selectedRoom
+
+        navigationController?.pushViewController(addRoomVC, animated: true)
+    }
+}
+
+extension RoomListViewController: RoomCellDelegate {
+    func didTapDelete(room: Room) {
+        confirmDeleteRoom(room)
+    }
+}
+
+extension RoomListViewController: UISearchResultsUpdating {
+
+    func updateSearchResults(for searchController: UISearchController) {
+        guard let searchText = searchController.searchBar.text?
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces),
+              !searchText.isEmpty else {
+            filteredRooms = rooms
+            updateEmptyState()
+            tableView.reloadData()
+            return
+        }
+
+        filteredRooms = rooms.filter { room in
+            room.name.lowercased().contains(searchText)
+        }
+
+        updateEmptyState()
+        tableView.reloadData()
     }
 }
