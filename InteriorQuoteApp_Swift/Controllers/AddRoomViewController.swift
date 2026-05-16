@@ -21,7 +21,11 @@ class AddRoomViewController: UIViewController {
     private let roomNameField = UITextField()
 
     private let saveNameButton = UIButton(type: .system)
+    
     private let photoButton = UIButton(type: .system)
+    private let roomImageView = UIImageView()
+    private var selectedRoomImage: UIImage?
+    
     private let addWindowButton = UIButton(type: .system)
     private let addFloorButton = UIButton(type: .system)
     private let saveRoomDetailsButton = UIButton(type: .system)
@@ -127,16 +131,26 @@ class AddRoomViewController: UIViewController {
 
         let title = createLabel(text: "Room photo", size: 24, weight: .bold, color: .label)
         let helper = createLabel(
-            text: "Add a photo of this room for reference. Save the room name first before adding a photo.",
+            text: "Choose a photo from the gallery to help identify this room later.",
             size: 16,
             weight: .regular,
             color: .secondaryLabel
         )
 
-        styleOutlineButton(photoButton, title: "Add / Change Photo")
+        roomImageView.contentMode = .scaleAspectFill
+        roomImageView.clipsToBounds = true
+        roomImageView.layer.cornerRadius = 16
+        roomImageView.backgroundColor = .secondarySystemBackground
+        roomImageView.heightAnchor.constraint(equalToConstant: 180).isActive = true
+
+        if let imageUrl = roomToEdit?.imageUrl {
+            loadRoomImage(filename: imageUrl)
+        }
+
+        styleOutlineButton(photoButton, title: "Choose Photo from Gallery")
         photoButton.addTarget(self, action: #selector(photoTapped), for: .touchUpInside)
 
-        addContent([title, helper, photoButton], to: card)
+        addContent([title, helper, roomImageView, photoButton], to: card)
         stackView.addArrangedSubview(card)
     }
 
@@ -249,8 +263,11 @@ class AddRoomViewController: UIViewController {
             return
         }
 
-        // Camera/gallery implementation comes in the camera stage.
-        showAlert(title: "Photo", message: "Camera and gallery selection will be added in the image stage.")
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        picker.delegate = self
+        present(picker, animated: true)
     }
 
     @objc private func addWindowTapped() {
@@ -339,5 +356,77 @@ class AddRoomViewController: UIViewController {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+    
+    private func saveImageLocally(_ image: UIImage, roomId: String) -> String? {
+        guard let imageData = image.jpegData(compressionQuality: 0.75) else {
+            return nil
+        }
+
+        let filename = "room_\(roomId).jpg"
+        let url = getDocumentsDirectory().appendingPathComponent(filename)
+
+        do {
+            try imageData.write(to: url)
+            return filename
+        } catch {
+            showAlert(title: "Image Save Failed", message: error.localizedDescription)
+            return nil
+        }
+    }
+
+    private func loadRoomImage(filename: String) {
+        let url = getDocumentsDirectory().appendingPathComponent(filename)
+
+        if let image = UIImage(contentsOfFile: url.path) {
+            roomImageView.image = image
+        }
+    }
+
+    private func getDocumentsDirectory() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+    
+}
+extension AddRoomViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+
+    func imagePickerController(_ picker: UIImagePickerController,
+                               didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+
+        picker.dismiss(animated: true)
+
+        let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage
+
+        guard let selectedImage = image,
+              let roomId = savedRoomId else {
+            return
+        }
+
+        selectedRoomImage = selectedImage
+        roomImageView.image = selectedImage
+
+        guard let filename = saveImageLocally(selectedImage, roomId: roomId) else {
+            return
+        }
+
+        db.collection("properties")
+            .document(property.id)
+            .collection("rooms")
+            .document(roomId)
+            .updateData([
+                "imageUrl": filename,
+                "updatedAt": Timestamp(date: Date())
+            ]) { error in
+                if let error = error {
+                    self.showAlert(title: "Photo Update Failed", message: error.localizedDescription)
+                    return
+                }
+
+                self.showAlert(title: "Photo Saved", message: "Room photo has been saved successfully.")
+            }
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
     }
 }

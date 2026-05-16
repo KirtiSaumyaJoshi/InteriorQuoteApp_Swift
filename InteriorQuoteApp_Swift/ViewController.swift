@@ -19,9 +19,9 @@ class ViewController: UIViewController {
             "status": "connected"
         ]) { error in
             if let error = error {
-                print("❌ Firestore error: \(error)")
+                print("Firestore error: \(error)")
             } else {
-                print("✅ Firestore connected successfully!")
+                print("Firestore connected successfully!")
             }
         }
     }
