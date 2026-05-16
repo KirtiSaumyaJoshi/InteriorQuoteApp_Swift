@@ -28,17 +28,27 @@ class AddRoomViewController: UIViewController {
     
     
     private let addWindowButton = UIButton(type: .system)
+    private var windows: [WindowSpace] = []
+    private let windowListStack = UIStackView()
     private let addFloorButton = UIButton(type: .system)
     private let saveRoomDetailsButton = UIButton(type: .system)
     var roomToEdit: Room?
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        
         title = "Add Room"
         view.backgroundColor = .systemGroupedBackground
         setupUI()
         populateRoomIfEditing()
         roomNameField.addTarget(self, action: #selector(roomNameChanged), for: .editingChanged)
+        
+    }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        if savedRoomId != nil {
+            fetchWindows()
+        }
     }
     private func populateRoomIfEditing() {
         guard let room = roomToEdit else { return }
@@ -50,6 +60,8 @@ class AddRoomViewController: UIViewController {
 
         saveNameButton.setTitle("Update Room Name", for: .normal)
         saveNameButton.isHidden = true
+
+        fetchWindows()
     }
     private func setupUI() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -161,6 +173,7 @@ class AddRoomViewController: UIViewController {
         let card = createCardView()
 
         let title = createLabel(text: "Windows", size: 24, weight: .bold, color: .label)
+
         let helper = createLabel(
             text: "Add each window space and assign a compatible window product.",
             size: 16,
@@ -168,11 +181,214 @@ class AddRoomViewController: UIViewController {
             color: .secondaryLabel
         )
 
+        windowListStack.axis = .vertical
+        windowListStack.spacing = 12
+
         styleOutlineButton(addWindowButton, title: "Add Window +")
         addWindowButton.addTarget(self, action: #selector(addWindowTapped), for: .touchUpInside)
 
-        addContent([title, helper, addWindowButton], to: card)
+        addContent(
+            [
+                title,
+                helper,
+                windowListStack,
+                addWindowButton
+            ],
+            to: card
+        )
+
         stackView.addArrangedSubview(card)
+    }
+    
+    private func fetchWindows() {
+
+        guard let savedRoomId = savedRoomId else { return }
+
+        db.collection("properties")
+            .document(property.id)
+            .collection("rooms")
+            .document(savedRoomId)
+            .collection("windows")
+            .order(by: "createdAt", descending: true)
+            .getDocuments { snapshot, error in
+
+                if let error = error {
+                    self.showAlert(
+                        title: "Windows Loading Failed",
+                        message: error.localizedDescription
+                    )
+                    return
+                }
+
+                self.windows = snapshot?.documents.compactMap { document in
+
+                    let data = document.data()
+
+                    guard let name = data["name"] as? String else {
+                        return nil
+                    }
+
+                    return WindowSpace(
+                        id: document.documentID,
+                        name: name,
+                        widthMM: data["widthMM"] as? Double,
+                        heightMM: data["heightMM"] as? Double,
+                        imageUrl: data["imageUrl"] as? String,
+                        productId: data["productId"] as? String,
+                        productName: data["productName"] as? String,
+                        pricePerSqm: data["pricePerSqm"] as? Double
+                    )
+
+                } ?? []
+
+                self.refreshWindowList()
+            }
+    }
+    
+    private func createWindowItemView(for window: WindowSpace) -> UIView {
+
+        let container = UIView()
+        container.backgroundColor = .secondarySystemBackground
+        container.layer.cornerRadius = 16
+
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 12
+        imageView.backgroundColor = .tertiarySystemBackground
+
+        if let imageUrl = window.imageUrl,
+           !imageUrl.isEmpty {
+
+            let url = getDocumentsDirectory().appendingPathComponent(imageUrl)
+
+            if let image = UIImage(contentsOfFile: url.path) {
+                imageView.image = image
+            }
+
+        } else {
+
+            imageView.image = UIImage(systemName: "photo")?.withRenderingMode(.alwaysTemplate)
+            imageView.tintColor = .secondaryLabel
+            imageView.contentMode = .center
+        }
+
+        let titleLabel = createLabel(
+            text: window.name,
+            size: 17,
+            weight: .bold,
+            color: .label
+        )
+
+        let measurementText: String
+
+        if let width = window.widthMM,
+           let height = window.heightMM {
+
+            measurementText = "\(Int(width)) mm × \(Int(height)) mm"
+
+        } else {
+
+            measurementText = "Measurements not completed"
+        }
+
+        let measurementLabel = createLabel(
+            text: measurementText,
+            size: 14,
+            weight: .regular,
+            color: .secondaryLabel
+        )
+
+        let productLabel = createLabel(
+            text: window.productName ?? "No product selected",
+            size: 14,
+            weight: .regular,
+            color: .secondaryLabel
+        )
+
+        let textStack = UIStackView(arrangedSubviews: [
+            titleLabel,
+            measurementLabel,
+            productLabel
+        ])
+
+        textStack.axis = .vertical
+        textStack.spacing = 4
+
+        let mainStack = UIStackView(arrangedSubviews: [
+            imageView,
+            textStack
+        ])
+
+        mainStack.axis = .horizontal
+        mainStack.spacing = 12
+        mainStack.alignment = .center
+
+        container.addSubview(mainStack)
+
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            mainStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            mainStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            mainStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            mainStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+
+            imageView.widthAnchor.constraint(equalToConstant: 70),
+            imageView.heightAnchor.constraint(equalToConstant: 70)
+        ])
+        
+        container.isUserInteractionEnabled = true
+
+        let tap = WindowTapGestureRecognizer(
+            target: self,
+            action: #selector(windowCardTapped(_:))
+        )
+
+        tap.window = window
+        container.addGestureRecognizer(tap)
+
+        return container
+    }
+    
+    @objc private func windowCardTapped(_ sender: WindowTapGestureRecognizer) {
+        guard let window = sender.window,
+              let savedRoomId = savedRoomId else {
+            return
+        }
+
+        let addWindowVC = AddWindowViewController()
+        addWindowVC.property = property
+        addWindowVC.roomId = savedRoomId
+        addWindowVC.windowToEdit = window
+
+        navigationController?.pushViewController(addWindowVC, animated: true)
+    }
+    
+    private func refreshWindowList() {
+
+        windowListStack.arrangedSubviews.forEach {
+            windowListStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+
+        if windows.isEmpty {
+
+            let emptyLabel = createLabel(
+                text: "No windows added yet.",
+                size: 15,
+                weight: .regular,
+                color: .secondaryLabel
+            )
+
+            windowListStack.addArrangedSubview(emptyLabel)
+            return
+        }
+
+        for window in windows {
+            let view = createWindowItemView(for: window)
+            windowListStack.addArrangedSubview(view)
+        }
     }
 
     private func setupFloorSection() {
@@ -274,12 +490,16 @@ class AddRoomViewController: UIViewController {
     }
 
     @objc private func addWindowTapped() {
-        guard savedRoomId != nil else {
+        guard let savedRoomId = savedRoomId else {
             showAlert(title: "Save Room First", message: "Please save the room name before adding windows.")
             return
         }
 
-        showAlert(title: "Windows", message: "Window adding screen will be built in the next stage.")
+        let addWindowVC = AddWindowViewController()
+        addWindowVC.property = property
+        addWindowVC.roomId = savedRoomId
+
+        navigationController?.pushViewController(addWindowVC, animated: true)
     }
 
     @objc private func addFloorTapped() {
@@ -431,5 +651,8 @@ extension AddRoomViewController: UIImagePickerControllerDelegate, UINavigationCo
 
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         picker.dismiss(animated: true)
+    }
+    class WindowTapGestureRecognizer: UITapGestureRecognizer {
+        var window: WindowSpace?
     }
 }

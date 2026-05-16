@@ -10,10 +10,10 @@ import Foundation
 class WindowSpace {
     var id: String
     var name: String
-    var widthMM: Double
-    var heightMM: Double
-    
-    // Product selection
+    var widthMM: Double?
+    var heightMM: Double?
+    var imageUrl: String?
+
     var productId: String?
     var productName: String?
     var pricePerSqm: Double?
@@ -21,15 +21,31 @@ class WindowSpace {
 
     init(id: String = UUID().uuidString,
          name: String,
-         widthMM: Double,
-         heightMM: Double) {
+         widthMM: Double? = nil,
+         heightMM: Double? = nil,
+         imageUrl: String? = nil,
+         productId: String? = nil,
+         productName: String? = nil,
+         pricePerSqm: Double? = nil,
+         selectedVariant: String? = nil) {
+
         self.id = id
         self.name = name
         self.widthMM = widthMM
         self.heightMM = heightMM
+        self.imageUrl = imageUrl
+        self.productId = productId
+        self.productName = productName
+        self.pricePerSqm = pricePerSqm
+        self.selectedVariant = selectedVariant
     }
 
     func area() -> Double {
+        guard let widthMM = widthMM,
+              let heightMM = heightMM else {
+            return 0
+        }
+
         return (widthMM / 1000.0) * (heightMM / 1000.0)
     }
 
