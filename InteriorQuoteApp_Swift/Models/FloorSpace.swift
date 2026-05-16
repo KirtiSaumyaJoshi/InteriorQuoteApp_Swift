@@ -9,23 +9,25 @@ import Foundation
 
 class FloorSpace {
     var id: String
-    var name: String
     var widthMM: Double
     var depthMM: Double
-    
+
     var productId: String?
     var productName: String?
     var pricePerSqm: Double?
-    var selectedVariant: String?
 
     init(id: String = UUID().uuidString,
-         name: String,
          widthMM: Double,
-         depthMM: Double) {
+         depthMM: Double,
+         productId: String? = nil,
+         productName: String? = nil,
+         pricePerSqm: Double? = nil) {
         self.id = id
-        self.name = name
         self.widthMM = widthMM
         self.depthMM = depthMM
+        self.productId = productId
+        self.productName = productName
+        self.pricePerSqm = pricePerSqm
     }
 
     func area() -> Double {

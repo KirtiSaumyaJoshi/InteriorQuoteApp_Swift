@@ -250,6 +250,12 @@ class AddRoomViewController: UIViewController {
         let container = UIView()
         container.backgroundColor = .secondarySystemBackground
         container.layer.cornerRadius = 16
+        
+        let deleteButton = WindowDeleteButton(type: .system)
+        deleteButton.windowSpace = window
+        deleteButton.setImage(UIImage(systemName: "trash.circle.fill"), for: .normal)
+        deleteButton.tintColor = .systemRed
+        deleteButton.addTarget(self, action: #selector(deleteWindowTapped(_:)), for: .touchUpInside)
 
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
@@ -317,8 +323,10 @@ class AddRoomViewController: UIViewController {
 
         let mainStack = UIStackView(arrangedSubviews: [
             imageView,
-            textStack
+            textStack,
+            deleteButton
         ])
+        
 
         mainStack.axis = .horizontal
         mainStack.spacing = 12
@@ -333,7 +341,8 @@ class AddRoomViewController: UIViewController {
             mainStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             mainStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
             mainStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
-
+            deleteButton.widthAnchor.constraint(equalToConstant: 34),
+            deleteButton.heightAnchor.constraint(equalToConstant: 34),
             imageView.widthAnchor.constraint(equalToConstant: 70),
             imageView.heightAnchor.constraint(equalToConstant: 70)
         ])
@@ -345,14 +354,53 @@ class AddRoomViewController: UIViewController {
             action: #selector(windowCardTapped(_:))
         )
 
-        tap.window = window
+        tap.windowSpace = window
         container.addGestureRecognizer(tap)
 
         return container
     }
     
+    @objc private func deleteWindowTapped(_ sender: WindowDeleteButton) {
+        guard let window = sender.windowSpace else { return }
+
+        let alert = UIAlertController(
+            title: "Delete Window?",
+            message: "This will delete \(window.name). This action cannot be undone.",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+            self.deleteWindow(window)
+        })
+
+        present(alert, animated: true)
+    }
+
+    private func deleteWindow(_ window: WindowSpace) {
+        guard let savedRoomId = savedRoomId else { return }
+
+        db.collection("properties")
+            .document(property.id)
+            .collection("rooms")
+            .document(savedRoomId)
+            .collection("windows")
+            .document(window.id)
+            .delete { error in
+
+                if let error = error {
+                    self.showAlert(title: "Delete Failed", message: error.localizedDescription)
+                    return
+                }
+
+                self.windows.removeAll { $0.id == window.id }
+                self.refreshWindowList()
+            }
+    }
+    
     @objc private func windowCardTapped(_ sender: WindowTapGestureRecognizer) {
-        guard let window = sender.window,
+        guard let window = sender.windowSpace,
               let savedRoomId = savedRoomId else {
             return
         }
@@ -653,6 +701,11 @@ extension AddRoomViewController: UIImagePickerControllerDelegate, UINavigationCo
         picker.dismiss(animated: true)
     }
     class WindowTapGestureRecognizer: UITapGestureRecognizer {
-        var window: WindowSpace?
+        var windowSpace: WindowSpace?
     }
+
+    class WindowDeleteButton: UIButton {
+        var windowSpace: WindowSpace?
+    }
+
 }
