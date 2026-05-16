@@ -121,7 +121,7 @@ class RoomListViewController: UIViewController {
             target: self,
             action: #selector(addRoomTapped)
         )
-
+        
         tableView.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -130,7 +130,11 @@ class RoomListViewController: UIViewController {
 
         tableView.dataSource = self
         tableView.delegate = self
+        
         tableView.register(RoomCell.self, forCellReuseIdentifier: "RoomCell")
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 105
+        
         tableView.backgroundColor = .clear
 
         emptyLabel.text = "No rooms added yet.\nTap + to add the first room."

@@ -26,6 +26,7 @@ class AddRoomViewController: UIViewController {
     private let roomImageView = UIImageView()
     private var selectedRoomImage: UIImage?
     
+    
     private let addWindowButton = UIButton(type: .system)
     private let addFloorButton = UIButton(type: .system)
     private let saveRoomDetailsButton = UIButton(type: .system)
@@ -142,6 +143,8 @@ class AddRoomViewController: UIViewController {
         roomImageView.layer.cornerRadius = 16
         roomImageView.backgroundColor = .secondarySystemBackground
         roomImageView.heightAnchor.constraint(equalToConstant: 180).isActive = true
+        roomImageView.image = UIImage(systemName: "photo")?.withRenderingMode(.alwaysTemplate)
+        roomImageView.tintColor = .secondaryLabel
 
         if let imageUrl = roomToEdit?.imageUrl {
             loadRoomImage(filename: imageUrl)
