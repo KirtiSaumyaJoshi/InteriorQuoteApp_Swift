@@ -168,6 +168,7 @@ class RoomListViewController: UIViewController {
     }
 
     private func fetchRooms() {
+
         db.collection("properties")
             .document(property.id)
             .collection("rooms")
@@ -175,30 +176,99 @@ class RoomListViewController: UIViewController {
             .getDocuments { snapshot, error in
 
                 if let error = error {
-                    self.showAlert(title: "Loading Failed", message: error.localizedDescription)
+                    self.showAlert(
+                        title: "Loading Failed",
+                        message: error.localizedDescription
+                    )
                     return
                 }
 
-                self.rooms = snapshot?.documents.compactMap { document in
+                guard let documents = snapshot?.documents else {
+                    self.rooms = []
+                    self.filteredRooms = []
+                    self.updateEmptyState()
+                    self.tableView.reloadData()
+                    return
+                }
+
+                var loadedRooms: [Room] = []
+
+                let dispatchGroup = DispatchGroup()
+
+                for document in documents {
+
                     let data = document.data()
 
                     guard let name = data["name"] as? String else {
-                        return nil
+                        continue
                     }
 
-                    return Room(
-                        id: document.documentID,
-                        name: name,
-                        imageUrl: data["imageUrl"] as? String
-                    )
-                } ?? []
+                    let imageUrl = data["imageUrl"] as? String
+                    let hasPhoto = !(imageUrl?.isEmpty ?? true)
 
-                self.filteredRooms = self.rooms
-                self.updateEmptyState()
-                self.tableView.reloadData()
+                    let roomRef = self.db.collection("properties")
+                        .document(self.property.id)
+                        .collection("rooms")
+                        .document(document.documentID)
+
+                    var windowCount = 0
+                    var hasFloor = false
+
+                    dispatchGroup.enter()
+
+                    let innerGroup = DispatchGroup()
+
+                    innerGroup.enter()
+                    roomRef.collection("windows")
+                        .getDocuments { snapshot, _ in
+
+                            windowCount = snapshot?.documents.count ?? 0
+                            innerGroup.leave()
+                        }
+
+                    innerGroup.enter()
+                    roomRef.collection("floors")
+                        .document("mainFloor")
+                        .getDocument { snapshot, _ in
+
+                            hasFloor = snapshot?.exists == true
+                            innerGroup.leave()
+                        }
+
+                    innerGroup.notify(queue: .main) {
+
+                        let isComplete = hasPhoto
+                            && windowCount > 0
+                            && hasFloor
+
+                        let room = Room(
+                            id: document.documentID,
+                            name: name,
+                            imageUrl: imageUrl,
+                            windows: [],
+                            floors: [],
+                            isComplete: isComplete,
+                            windowCount: windowCount,
+                            hasFloor: hasFloor
+                        )
+
+                        loadedRooms.append(room)
+
+                        dispatchGroup.leave()
+                    }
+                }
+
+                dispatchGroup.notify(queue: .main) {
+
+                    self.rooms = loadedRooms
+
+                    self.filteredRooms = loadedRooms
+
+                    self.updateEmptyState()
+                    self.tableView.reloadData()
+                }
             }
     }
-
     private func updateEmptyState() {
         let visibleRooms = isSearching ? filteredRooms : rooms
 

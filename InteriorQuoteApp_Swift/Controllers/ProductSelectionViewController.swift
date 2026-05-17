@@ -17,9 +17,10 @@ class ProductSelectionViewController: UIViewController {
 
     var products: [Product] = []
 
+    var windowWidthMM: Double?
+    var windowHeightMM: Double?
+
     private let tableView = UITableView()
-    var windowWidthMM: Double!
-    var windowHeightMM: Double!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -68,40 +69,61 @@ extension ProductSelectionViewController: UITableViewDataSource, UITableViewDele
         }
 
         let product = products[indexPath.row]
-        let result = ProductConstraintChecker.check(
-            product: product,
-            widthMM: windowWidthMM,
-            heightMM: windowHeightMM
-        )
 
-        cell.configure(with: product, compatibility: result)
+        if let width = windowWidthMM,
+           let height = windowHeightMM {
+
+            let result = ProductConstraintChecker.check(
+                product: product,
+                widthMM: width,
+                heightMM: height
+            )
+
+            cell.configure(with: product, compatibility: result)
+
+        } else {
+
+            let result = ProductCompatibilityResult(
+                isCompatible: true,
+                message: "Compatible"
+            )
+
+            cell.configure(with: product, compatibility: result)
+        }
+
         return cell
     }
 
     func tableView(_ tableView: UITableView,
                    didSelectRowAt indexPath: IndexPath) {
+
+        tableView.deselectRow(at: indexPath, animated: true)
+
         let product = products[indexPath.row]
 
-        let result = ProductConstraintChecker.check(
-            product: product,
-            widthMM: windowWidthMM,
-            heightMM: windowHeightMM
-        )
+        if let width = windowWidthMM,
+           let height = windowHeightMM {
 
-        if !result.isCompatible {
-            let alert = UIAlertController(
-                title: "Product Not Compatible",
-                message: result.message,
-                preferredStyle: .alert
+            let result = ProductConstraintChecker.check(
+                product: product,
+                widthMM: width,
+                heightMM: height
             )
 
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            present(alert, animated: true)
-            return
+            if !result.isCompatible {
+                let alert = UIAlertController(
+                    title: "Product Not Compatible",
+                    message: result.message,
+                    preferredStyle: .alert
+                )
+
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                present(alert, animated: true)
+                return
+            }
         }
 
         delegate?.didSelectProduct(product)
         navigationController?.popViewController(animated: true)
-        
     }
 }
