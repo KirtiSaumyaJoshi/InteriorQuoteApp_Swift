@@ -6,7 +6,7 @@
 //
 
 import Foundation
-
+ 
 class Room {
     var id: String
     var name: String
@@ -16,7 +16,8 @@ class Room {
     var floors: [FloorSpace]
     var windowCount: Int
     var hasFloor: Bool
-    
+    var isFloorIncludedInQuote: Bool
+ 
     init(id: String = UUID().uuidString,
          name: String,
          imageUrl: String? = nil,
@@ -24,7 +25,8 @@ class Room {
          floors: [FloorSpace] = [],
          isComplete: Bool = false,
          windowCount: Int = 0,
-         hasFloor: Bool = false) {
+         hasFloor: Bool = false,
+         isFloorIncludedInQuote: Bool = true) {
         self.id = id
         self.name = name
         self.imageUrl = imageUrl
@@ -33,5 +35,21 @@ class Room {
         self.isComplete = isComplete
         self.windowCount = windowCount
         self.hasFloor = hasFloor
+        self.isFloorIncludedInQuote = isFloorIncludedInQuote
+    }
+    func quoteCost() -> Double {
+        let windowTotal = windows
+            .filter { $0.isIncludedInQuote }
+            .reduce(0.0) { $0 + $1.cost() }
+
+        let floorTotal: Double
+        if isFloorIncludedInQuote, let floor = floors.first {
+            floorTotal = floor.cost()
+        } else {
+            floorTotal = 0
+        }
+
+        return windowTotal + floorTotal
     }
 }
+ 

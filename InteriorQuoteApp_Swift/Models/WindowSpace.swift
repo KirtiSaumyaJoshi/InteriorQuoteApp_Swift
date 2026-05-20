@@ -13,7 +13,7 @@ class WindowSpace {
     var widthMM: Double?
     var heightMM: Double?
     var imageUrl: String?
-
+    var isIncludedInQuote: Bool
     var productId: String?
     var productName: String?
     var pricePerSqm: Double?
@@ -27,6 +27,7 @@ class WindowSpace {
          productId: String? = nil,
          productName: String? = nil,
          pricePerSqm: Double? = nil,
+         isIncludedInQuote: Bool = true,
          selectedVariant: String? = nil) {
 
         self.id = id
@@ -38,6 +39,7 @@ class WindowSpace {
         self.productName = productName
         self.pricePerSqm = pricePerSqm
         self.selectedVariant = selectedVariant
+        self.isIncludedInQuote = isIncludedInQuote
     }
 
     func area() -> Double {
