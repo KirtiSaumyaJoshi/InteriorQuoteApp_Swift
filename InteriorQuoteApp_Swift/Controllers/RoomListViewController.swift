@@ -16,20 +16,17 @@ class RoomListViewController: UIViewController {
     private var rooms: [Room] = []
     private var filteredRooms: [Room] = []
 
-    // Tracks which rooms are toggled into the quote
     private var selectedQuoteRoomIds: Set<String> = []
 
-    // MARK: - UI
     private let tableView   = UITableView()
     private let emptyLabel  = UILabel()
     private let searchController = UISearchController(searchResultsController: nil)
 
-    // Quote panel (pinned to bottom)
     private let quotePanel          = UIView()
-    private let quotePanelToggle    = UIButton(type: .system)   // chevron to collapse/expand
-    private let quoteReceiptView    = UIView()                  // the scrollable receipt inside
+    private let quotePanelToggle    = UIButton(type: .system)
+    private let quoteReceiptView    = UIView()
     private let quoteWindowsStack   = UIStackView()
-    private let quoteRoomsStack     = UIStackView()             // one section per room
+    private let quoteRoomsStack     = UIStackView()
     private let quoteTotalAmountLabel = UILabel()
     private let quoteEmptyLabel     = UILabel()
     private var quotePanelExpanded  = true
@@ -287,7 +284,7 @@ class RoomListViewController: UIViewController {
             quoteRoomsStack.addArrangedSubview(roomSection)
             grandTotal += room.quoteCost()
         }
-
+       
         quoteTotalAmountLabel.text = String(format: "$%.2f", grandTotal)
     }
 
